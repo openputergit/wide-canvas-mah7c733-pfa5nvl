@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KickMatch Pro - Tournament Management</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Poppins', sans-serif;
+        }
+        .tournament-bracket {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+        }
+        .round {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+        }
+        .match {
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Login/Register Section -->
+    <div id="authSection" class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+            <h2 class="text-2xl font-bold mb-6 text-center">KickMatch Pro</h2>
+            <div id="authTabs" class="flex mb-6">
+                <button onclick="switchTab('login')" class="flex-1 py-2 text-center border-b-2 border-blue-500">Login</button>
+                <button onclick="switchTab('register')" class="flex-1 py-2 text-center border-b">Register</button>
+            </div>
+            <form id="authForm" onsubmit="handleAuth(event)">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">Email</label>
+                    <input type="email" id="email" class="w-full px-3 py-2 border rounded-lg" required>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">Password</label>
+                    <input type="password" id="password" class="w-full px-3 py-2 border rounded-lg" required>
+                </div>
+                <div id="registerFields" style="display: none;">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                        <select id="role" class="w-full px-3 py-2 border rounded-lg">
+                            <option value="coach">Coach</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600">
+                    <span id="authButtonText">Login</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App Section -->
+    <div id="appSection" class="hidden">
+        <!-- Navigation -->
+        <nav class="bg-blue-600 text-white p-4">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold">KickMatch Pro</h1>
+                <button onclick="logout()" class="px-4 py-2 bg-red-500 rounded hover:bg-red-600">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            </div>
+        </nav>
+
+        <!-- Dashboard -->
+        <div class="container mx-auto p-4">
+            <div id="adminPanel" class="hidden">
+                <h2 class="text-2xl font-bold mb-4">Admin Dashboard</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">Manage Coaches</h3>
+                        <button onclick="showCoachList()" class="bg-blue-500 text-white px-4 py-2 rounded">View Coaches</button>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">Tournaments</h3>
+                        <button onclick="createTournament()" class="bg-green-500 text-white px-4 py-2 rounded">Create Tournament</button>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">Players</h3>
+                        <button onclick="managePlayers()" class="bg-purple-500 text-white px-4 py-2 rounded">Manage Players</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="coachPanel" class="hidden">
+                <h2 class="text-2xl font-bold mb-4">Coach Dashboard</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">My Students</h3>
+                        <button onclick="manageStudents()" class="bg-blue-500 text-white px-4 py-2 rounded">Manage Students</button>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">Tournaments</h3>
+                        <button onclick="viewTournaments()" class="bg-green-500 text-white px-4 py-2 rounded">View Tournaments</button>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-2">Match History</h3>
+                        <button onclick="viewMatchHistory()" class="bg-purple-500 text-white px-4 py-2 rounded">View History</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCAuEOVPluWiPwE_GNtbhuYb9HStke7CFs",
+  authDomain: "kickboxing-e54f2.firebaseapp.com",
+  projectId: "kickboxing-e54f2",
+  storageBucket: "kickboxing-e54f2.firebasestorage.app",
+  messagingSenderId: "899209048139",
+  appId: "1:899209048139:web:c75347d76b2cde7d105dce",
+  measurementId: "G-P3GHJ5SVN3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUser = null;
+
+        // Auth UI Management
+        function switchTab(tab) {
+            const registerFields = document.getElementById('registerFields');
+            const authButtonText = document.getElementById('authButtonText');
+            const loginTab = document.querySelector('[onclick="switchTab(\'login\')"]');
+            const registerTab = document.querySelector('[onclick="switchTab(\'register\')"]');
+
+            if (tab === 'login') {
+                registerFields.style.display = 'none';
+                authButtonText.textContent = 'Login';
+                loginTab.classList.add('border-blue-500');
+                registerTab.classList.remove('border-blue-500');
+            } else {
+                registerFields.style.display = 'block';
+                authButtonText.textContent = 'Register';
+                registerTab.classList.add('border-blue-500');
+                loginTab.classList.remove('border-blue-500');
+            }
+        }
+
+        // Authentication Handler
+        async function handleAuth(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('role').value;
+            const isLogin = document.getElementById('authButtonText').textContent === 'Login';
+
+            showLoading();
+
+            try {
+                if (isLogin) {
+                    await auth.signInWithEmailAndPassword(email, password);
+                } else {
+                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    await db.collection('users').doc(userCredential.user.uid).set({
+                        email,
+                        role,
+                        createdAt: new Date()
+                    });
+                }
+            } catch (error) {
+                hideLoading();
+                Swal.fire('Error', error.message, 'error');
+            }
+        }
+
+        // Auth State Observer
+        auth.onAuthStateChanged(async (user) => {
+            hideLoading();
+            if (user) {
+                currentUser = user;
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                const userData = userDoc.data();
+                
+                document.getElementById('authSection').classList.add('hidden');
+                document.getElementById('appSection').classList.remove('hidden');
+                
+                if (userData.role === 'admin') {
+                    document.getElementById('adminPanel').classList.remove('hidden');
+                    document.getElementById('coachPanel').classList.add('hidden');
+                } else {
+                    document.getElementById('adminPanel').classList.add('hidden');
+                    document.getElementById('coachPanel').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('appSection').classList.add('hidden');
+            }
+        });
+
+        // Utility Functions
+        function showLoading() {
+            document.getElementById('loading').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        async function logout() {
+            try {
+                await auth.signOut();
+                Swal.fire('Success', 'Logged out successfully', 'success');
+            } catch (error) {
+                Swal.fire('Error', error.message, 'error');
+            }
+        }
+
+        // Feature Functions
+        function createTournament() {
+            Swal.fire({
+                title: 'Create Tournament',
+                html: `
+                    <input id="tournamentName" class="swal2-input" placeholder="Tournament Name">
+                    <input id="tournamentDate" class="swal2-input" type="date">
+                    <select id="tournamentType" class="swal2-input">
+                        <option value="knockout">Knockout</option>
+                        <option value="league">League</option>
+                    </select>
+                `,
+                confirmButtonText: 'Create',
+                showCancelButton: true,
+                preConfirm: () => {
+                    return {
+                        name: document.getElementById('tournamentName').value,
+                        date: document.getElementById('tournamentDate').value,
+                        type: document.getElementById('tournamentType').value
+                    }
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        await db.collection('tournaments').add({
+                            ...result.value,
+                            createdBy: currentUser.uid,
+                            createdAt: new Date()
+                        });
+                        Swal.fire('Success', 'Tournament created successfully', 'success');
+                    } catch (error) {
+                        Swal.fire('Error', error.message, 'error');
+                    }
+                }
+            });
+        }
+
+        // Additional feature functions would go here...
+
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
